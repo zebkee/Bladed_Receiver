@@ -1,0 +1,157 @@
+#Assembly stage of multiple faces
+
+from tracer.object import AssembledObject
+from tracer.surface import Surface
+from tracer.flat_surface import RectPlateGM
+from tracer.paraboloid import ParabolicDishGM, RectangularParabolicDishGM
+from tracer import optics_callables as opt
+from tracer.spatial_geometry import general_axis_rotation
+
+from numpy import r_
+import numpy as N
+import types
+import math 
+
+def z_rot(x_ang,y_ang,z_ang):
+    """
+    Returns the rotation matrix of a rotation about each coordinate axes done one after another. Input in Radians.
+    """
+    #remove my
+    mx = N.matrix(general_axis_rotation(r_[1,0,0],x_ang))
+    my = N.matrix(general_axis_rotation(r_[0,1,0],y_ang))
+    mz = N.matrix(general_axis_rotation(r_[0,0,1],z_ang))
+    M1 = my*mx
+    M2 = mz*M1
+    return M2
+ 
+def surfaces_for_next_iteration(self, rays, surface_id):
+    """
+    Informs the ray tracer that some of the surfaces can be skipped in the
+    next ireration for some of the rays.
+    This implementation marks all surfaces as irrelevant to all rays.
+    
+    Arguments:
+    rays - the RayBundle to check. 
+    surface_id - the index of the surface which generated this bundle.
+    
+    Returns:
+    an array of size s by r for s surfaces in this object and r rays,
+        stating whether ray i=1..r should be intersected with surface j=1..s
+        in the next iteration.
+    """
+    return N.zeros((len(self.surfaces), rays.get_num_rays()), dtype=N.bool)
+
+def cavity_receiver(width, height, absorptivity=1.):
+    """
+    Constructs a lambertian receiver consisting of three faces. Returns a list of receiving faces, the assembled object
+    """
+    front = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[0.,0.,0.],rotation=general_axis_rotation(r_[1,0,0],N.pi/2))
+    left = Surface(RectPlateGM(width, height/2.0),opt.LambertianReceiver(absorptivity),location=r_[width/2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/-2))
+    left.width = width
+    left.height = height/2.
+    right = Surface(RectPlateGM(width, height/2.0),opt.LambertianReceiver(absorptivity),location=r_[width/-2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/2))
+    right.width = width
+    right.height = height/2.
+    obj = AssembledObject(surfs=[front, left, right])
+    #obj.surfaces_for_next_iteration = types.MethodType(surfaces_for_next_iteration, obj, obj.__class__)
+    return [front, left, right], obj
+
+def thin_bladed_receiver(width, height, absorptivity, blades):
+    """
+    Constructs lambertian receiver consisting of thin blades.
+    """
+    front = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[0.,width/-2.,0.],rotation=general_axis_rotation(r_[1,0,0],N.pi/2))
+    n = 0
+    front.axis = [1,0,0]
+    front.tilt = N.pi/2
+    reclist = []
+    reclist.append(front)
+    while n < blades:
+	blade = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[width/2-(n*width/(blades-1)),0.,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/-2))
+	blade.number = n+1
+	blade.axis = [0,1,0]
+	blade.tilt = N.pi/2
+	reclist.append(blade)
+	n += 1
+    obj = AssembledObject(surfs=reclist)
+    #obj.surfaces_for_next_iteration = types.MethodType(surfaces_for_next_iteration, obj, obj.__class__)
+    return reclist, obj
+
+def Lamby(a,x,y,z,rx,ry,rz,w,h):
+	"""
+	Simplified Lambertian plate generator
+	"""
+	surface = Surface(RectPlateGM(w,h),opt.LambertianReceiver(a),location=r_[x,y,z],rotation=z_rot(rx,ry,rz))
+	return surface
+
+def true_bladed_receiver(A,B,W1,W2,H,D,R):
+	"""
+	Constructs a thick bladed receiver with standardized orientation.
+	"""
+	#B is blades, W1 is X_width, W2 is Y_width, H is vertical height, D is depth of blades, R is thickness to sep. ratio
+	#A is absorptivity
+	S = W1/(B*(1.0+R)-1.0)
+	T = S*R
+	#print(S)
+	#print(T)
+	critlist = []
+	objlist = []
+	#start with leftmost
+	blade = Lamby(A,W1/2.,0,0,N.pi/-2,0,N.pi/-2,W2,H)
+	critlist.append(blade)
+	objlist.append(blade)
+	n = 1
+	while n < B:
+		bladeA = Lamby(A,W1/2.-(n-0.5)*T-(n-1)*S,W2/2.,0,N.pi/-2.,0,0,T,H)
+		critlist.append(bladeA)
+		objlist.append(bladeA)
+		bladeB = Lamby(A,W1/2.-n*T-(n-1)*S,W2/2.-D/2.,0,N.pi/-2.,0,N.pi/2.,D,H)
+		critlist.append(bladeB)
+		objlist.append(bladeB)
+		bladeC = Lamby(A,W1/2.-n*T-(n-0.5)*S,W2/2.-D,0,N.pi/-2.,0,0,S,H)
+		critlist.append(bladeC)
+		objlist.append(bladeC)
+		bladeD = Lamby(A,W1/2.-n*T-n*S,W2/2.-D/2.,0,N.pi/-2.,0,N.pi/-2.,D,H)
+		critlist.append(bladeD)
+		objlist.append(bladeD)
+		n += 1
+	#Now for the 2nd last critical blade
+	bladeA = Lamby(A,W1/2.-(n-0.5)*T-(n-1)*S,W2/2.,0,N.pi/-2.,0,0,T,H)
+	critlist.append(bladeA)
+	objlist.append(bladeA)
+	#And the last one
+	blade = Lamby(A,W1/-2.,0,0,N.pi/-2,0,N.pi/2,W2,H)
+	critlist.append(blade)
+	objlist.append(blade)
+	#Critlist is done!
+	#Backface
+	blade = Lamby(A,0,-W2/2,0,N.pi/-2,0,0,W1,H)
+	objlist.append(blade)
+	#Top and Bottom Extras
+	#For the blades
+	n = 1
+	while n <= B:
+		blade = Lamby(A,W1/2-(n-0.5)*T-(n-1)*S,0,H/2,0,0,0,T,W2)
+		objlist.append(blade)
+		blade = Lamby(A,W1/2-(n-0.5)*T-(n-1)*S,0,H/-2,0,0,0,T,W2)
+		objlist.append(blade)
+		n += 1
+	n = 1
+	while n < B:
+		blade = Lamby(A,W1/2-n*T-(n-0.5)*S,D/-2,H/2,0,0,0,S,W2-D)
+		objlist.append(blade)
+		blade = Lamby(A,W1/2-n*T-(n-0.5)*S,D/-2,H/-2,0,0,0,S,W2-D)
+		objlist.append(blade)
+		n += 1
+	#Assemble the object
+    	obj = AssembledObject(surfs=objlist)
+	return critlist, obj, objlist
+
+def test_receiver(width, height, absorptivity):
+    """
+    Constructs a test receiver
+    """
+    front = Lamby(absorptivity,0,0,0,N.pi/-2,0,N.pi/-2,width,height)
+    #front = Surface(RectPlateGM(width,height),opt.LambertianReceiver(absorptivity),location=r_[0.,1,0.],rotation=z_rot(N.pi/2,N.pi/2,N.pi/2))
+    obj = AssembledObject(surfs=[front])
+    return [front], obj
