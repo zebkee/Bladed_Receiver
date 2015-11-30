@@ -14,6 +14,7 @@ from tracer.sources import pillbox_sunshape_directions
 from tracer.assembly import Assembly
 from tracer.spatial_geometry import roty, rotx, rotz, rotation_to_z
 from tracer.tracer_engine import TracerEngine
+from tracer.tracer_engine_mp import TracerEngineMP
 from tracer.optics_callables import *
 # Import Tracer Models
 from tracer.models.heliostat_field import HeliostatField, radial_stagger, solar_vector
@@ -22,14 +23,16 @@ from models.receiver import *
 # Import Coin3D Renderer
 from tracer.CoIn_rendering.rendering import *
 
-def z_hist1d(H,binny=50):
+def z_hist1d(H_norm,binny,show=True):
    	"""Creates a 1d histogram to disply flux uniformity"""
-	bigarray = [item for sublist in H for item in sublist]
+	bigarray = [item for sublist in H_norm for item in sublist]
 	maxconc = max(bigarray)
-	print("The maximum concentration is "+str(maxconc)+" W per square metre")
+	print("The maximum concentration is "+str(maxconc)+" kW per square metre")
 	H_1, binedge = N.histogram(bigarray,bins = binny)
-	plt.hist(H_1,bins = binedge)
-	plt.show()
+	if show == True:
+		plt.hist(H_1,bins = binedge)
+		plt.show()
+	return maxconc
 	#print(N.std(bigarray))
 
 # Creates a scene of the tower
@@ -86,7 +89,7 @@ class TowerScene():
     def aim_field(self):
         self.field.aim_to_sun(self.sun_az*degree, self.sun_elev*degree)
     
-    def trace(self, hstat_rays = 5, iters = 100, minE = 1e-5, render=True):
+    def trace(self, hstat_rays = 10, iters = 1000, minE = 1e-5, render=True):
         """Generate a flux map using much more rays than drawn"""
         # Generate a large ray bundle using a radial stagger much denser
         # than the field.
@@ -109,6 +112,7 @@ class TowerScene():
         
         # Perform the trace:
         e = TracerEngine(self.plant)
+	#print(rays)
         e.ray_tracer(rays, iters, minE, tree=True)
         e.minener = minE # default 1e-5
 
@@ -116,6 +120,40 @@ class TowerScene():
         	trace_scene = Renderer(e)
         	trace_scene.show_rays()
 
+    def traceMP(self, procs = 3, hstat_rays = 10, iters = 1000, minE = 1e-5, render = True):
+	"""Traces using multiple processors. May have to reduce hstatrays by factor of procs if memory runs out. Do the division of total rays beforehand."""
+	# e= None just prevents the buildup of memory
+	e = None
+	self.hstat_rays = hstat_rays
+        sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
+	n = 1
+	ray_sources = []
+	while n <= procs:
+        	num_rays = hstat_rays*len(self.field.get_heliostats())
+        	rot_sun = rotation_to_z(-sun_vec)
+        	direct = N.dot(rot_sun, pillbox_sunshape_directions(num_rays, 0.00465))
+        
+        	xy = N.random.uniform(low=-0.25, high=0.25, size=(2, num_rays))
+        	base_pos = N.tile(self.pos, (hstat_rays, 1)).T
+        	base_pos += N.dot(rot_sun[:,:2], xy)
+        
+        	base_pos -= direct
+        	rays = RayBundle(base_pos, direct, energy=N.ones(num_rays))
+		ray_sources.append(rays)
+		n += 1
+        
+        # Perform the trace:
+        e = TracerEngineMP(self.plant)
+	e.minener = minE
+	e.itmax = iters
+        e.multi_ray_sim(ray_sources, procs)
+	#e.multi_ray_sim(rays,procs)
+
+	if render == True:
+        	trace_scene = Renderer(e)
+        	trace_scene.show_rays()
+	raysources = []
+	
     def z_hist(self,no_of_bins=50):
 	""" Generates a histogram of all surfaces present within self.reclist and displays them one after another when  manually closed
 	    Also prints the total energy hits of all surfaces"""
@@ -254,8 +292,9 @@ class TowerScene():
 	for face in self.objlist:
 		energy, pts = face.get_optics_manager().get_all_hits()
 		totalenergy += energy.sum()
-		#print(list(energy))
-		hits += len([i for i in list(energy) if i > 0.999*absorb])
+		print(len(energy))
+		print(len(list(energy)))
+		hits += len([i for i in list(energy) if i > 0.99*absorb])
 	return totalenergy, hits
 
     def z_histdata(self,no_of_bins=100):
@@ -307,6 +346,7 @@ class TowerScene():
 		totalenergy += subtotalenergy
 		X_offset += w
 		boundlist.append(X_offset)
+	#print(len(all_E))
 	rngy = h
 	rngx = X_offset
 	bins = [no_of_bins,int(no_of_bins*X_offset)]
