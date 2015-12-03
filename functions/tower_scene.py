@@ -1,0 +1,209 @@
+#Python Packages
+import numpy as N
+from numpy import r_
+from scipy.constants import degree
+#Tracer Packages
+from tracer.ray_bundle import RayBundle
+from tracer.sources import pillbox_sunshape_directions
+from tracer.assembly import Assembly
+from tracer.spatial_geometry import roty, rotx, rotz, rotation_to_z
+from tracer.tracer_engine import TracerEngine
+from tracer.tracer_engine_mp import TracerEngineMP
+from tracer.optics_callables import *
+#Tracer Models
+from tracer.models.heliostat_field import HeliostatField, radial_stagger, solar_vector
+#Coin3D renderer
+from tracer.CoIn_rendering.rendering import *
+
+
+class TowerScene():
+	""" Creates a scene of the heliostats, tower and receiver """
+	# recobj is an assembled receiver object
+	# surf_ls is a list of all surfaces used in the receiver
+	# crit_ls is a list of all surfaces to be viewed in a histogram
+	# heliostat is a csv file of coordinates (Example: sandia_hstat_coordinates.csv)
+	# dx,dy,dz are x,y,z offsets from the origin (default dz is 6.1 metres)
+	# rx,ry,rz are rotations about the x,y,z axes in radians (default 0)
+	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 80.,sun_elev = 45.,\
+	dx = 0., dy = 0., dz = 6.1, rx = 0, ry = 0, rz = 0):
+		self.sun_az = sun_az
+		self.sun_elev = sun_elev
+		self.rec_obj = rec_obj
+		self.surf_ls = surf_ls
+		self.crit_ls = crit_ls
+		# add offset properties
+		self.dx = dx
+		self.dy = dy
+		self.dz = dz
+		# add rotation properties
+		self.rx = rx
+		self.ry = ry
+		self.rz = rz
+		# add the heliostat coordinates
+		self.pos = N.loadtxt(heliostat, delimiter=",")
+		self.pos *= 0.1
+		# generate the entire plant now
+		self.gen_plant()
+		# creates an attribute which shows number of rays used, start at zero
+		self.no_of_rays = 0
+
+	def gen_rays(self):
+		sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
+        	rpos = (self.pos + sun_vec).T
+        	direct = N.tile(-sun_vec, (self.pos.shape[0], 1)).T
+        	rays = RayBundle(rpos, direct, energy=N.ones(self.pos.shape[0]))
+
+		return rays
+
+	def gen_plant(self):
+		"""Generates the entire plant"""
+		# set heliostat field characteristics: 0.52m*0.52m, abs = 0, aim_h =61
+		self.field = HeliostatField(self.pos, 6.09e-1, 6.01e-1, 0, 6.1, 1e-3)
+		# generates a transformation matrix of the receiver rec_trans for rotations
+		rx_M = N.matrix(rotx(self.rx))
+		ry_M = N.matrix(rotx(self.ry))
+		rz_M = N.matrix(rotx(self.rz))
+		rec_trans = N.array((rx_M)*(ry_M)*(rz_M))
+		# applies translations to the rotation matrix to get the final transformation
+		rec_trans[0,3] = self.dx
+		rec_trans[0,2] = self.dy
+		rec_trans[2,3] = self.dz
+		# applies the transformation to the receiver object
+		self.rec_obj.set_transform(rec_trans)
+		# combines all objects into a single plant
+		self.plant = Assembly(objects = [self.rec_obj], subassemblies=[self.field])
+
+	def aim_field(self):
+		"""Aims the field to the sun?"""
+		self.field.aim_to_sun(self.sun_az*degree, self.sun_elev*degree)
+
+	def trace(self, rph, iters = 10000, minE = 1e-9, render = False):
+		"""Commences raytracing using (rph) number of rays per heliostat, for a maximum of 
+		   (iters) iterations, discarding rays with energy less than (minE). If render is
+		   True, a 3D scene will be displayed which would need to be closed to proceed."""
+		# Get the solar vector using azimuth and elevation
+		sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
+        	# Calculate number of rays used. Rays per heliostat * number of heliostats.
+        	num_rays = rph*len(self.field.get_heliostats())
+		self.no_of_rays += num_rays
+		# Generates the ray bundle
+        	rot_sun = rotation_to_z(-sun_vec)
+        	direct = N.dot(rot_sun, pillbox_sunshape_directions(num_rays, 0.00465))
+        
+        	xy = N.random.uniform(low=-0.25, high=0.25, size=(2, num_rays))
+        	base_pos = N.tile(self.pos, (rph, 1)).T #Check if its is rph or num_rays
+       		base_pos += N.dot(rot_sun[:,:2], xy)
+        	
+        	base_pos -= direct
+        	rays = RayBundle(base_pos, direct, energy=N.ones(num_rays))
+
+		# Perform the raytracing
+		e = TracerEngine(self.plant)
+		e.ray_tracer(rays, iters, minE, tree=True)
+		e.minener = minE
+
+		# Optional rendering
+		if render == True:
+			trace_scene = Renderer(e)
+			trace_scene.show_rays()
+			
+	def traceMP(self, procs , rph, iters = 10000, minE = 1e-9, render = False):
+		"""The multiprocessing version of trace."""
+		# Number of rays per processor
+		num_rays = rph*len(self.field.get_heliostats())
+		# Number of rays per traceMP called
+		self.no_of_rays += num_rays*procs
+		# Get the solar vector
+        	sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
+        	rot_sun = rotation_to_z(-sun_vec)
+        	direct = N.dot(rot_sun, pillbox_sunshape_directions(num_rays, 0.00465))
+		# Generate a list of ray bundles using a random generator
+		n = 1
+		ray_sources = []
+		while n <= procs:
+	        	xy = N.random.uniform(low=-0.25, high=0.25, size=(2, num_rays))
+        		base_pos = N.tile(self.pos, (rph, 1)).T
+        		base_pos += N.dot(rot_sun[:,:2], xy)
+        
+        		base_pos -= direct
+        		rays = RayBundle(base_pos, direct, energy=N.ones(num_rays))
+			ray_sources.append(rays)
+			n += 1
+		# Perform the trace
+		e = TracerEngineMP(self.plant)
+		e.minener = minE
+		e.itmax = iters
+		e.multi_ray_sim(raysources, procs)
+		# Reassign the assembly
+		self.plant = e._asm
+
+		# Rendering if the option is True. Note: still has problems
+		if render == True:
+			trace_scene = Renderer(e)
+			trace_scene.show_rays()
+
+	def hist_comb(self, no_of_bins=100):
+		"""Returns a combined histogram of all critical surfaces and relevant data"""
+		# H is the histogram array
+		# boundlist is a list of plate boundaries given in x coordinates
+		# extent is a list of [xmin,xmax,ymin,ymax] values
+		# binarea is the area of each bin. Used to estimate flux concentration
+
+		# Define empty elements
+		X_offset = 0	# Used to shift values to the right for each subsequent surface
+		all_X = []	# List of all x-coordinates
+		all_Y = []	# List of all y-coordinates
+		all_E = []	# List of all energy values
+		boundlist = [0]	# List of plate boundaries, starts with x=0
+
+		for plate in self.crit_ls:	#For each surface within the list of critical surfs
+			# returns all coordinates where a hit occured and its energy absorbed
+			energy, pts = plate.get_optics_manager().get_all_hits()
+			corners = plate.mesh(1) #corners is an array of all corners of the plate
+			# BLC is bottom left corner "origin" of the histogram plot
+			# BRC is the bottom right corner "x-axis" used for vector u
+			# TLC is the top right corner "y-axis" used for vector v
+			BLC = N.array([corners[0][1][1],corners[1][1][1],corners[2][1][1]])
+			BRC = N.array([corners[0][0][1],corners[1][0][1],corners[2][0][1]])
+			TLC = N.array([corners[0][1][0],corners[1][1][0],corners[2][1][0]])
+			# Get vectors u and v in array form of array([x,y,z])
+			u = BRC - BLC
+			v = TLC - BLC
+			# Get width(magnitude of u) and height(magnitude of v) in float form
+			w = (sum(u**2))**0.5
+			h = (sum(v**2))**0.5
+			# Get unit vectors of u and v in form of array([x,y,z])
+			u_hat = u/w
+			v_hat = v/h
+			# Local x-position determined using dot product of each point with direction
+			# Returns a list of local x and y coordinates
+			origin = N.array([[BLC[0]],[BLC[1]],[BLC[2]]])
+			local_X = list((N.array(N.matrix(u_hat)*N.matrix(pts-origin))+X_offset)[0])
+			#local_Y = list((N.array(N.matrix(v_hat)*N.matrix(pts-origin)))[0])
+			local_Y = list((((N.array(N.matrix(v_hat)*N.matrix(pts-origin)))[0])*-1)+h)
+			# Adds to the lists
+			all_X += local_X
+			all_Y += local_Y
+			all_E += list(energy)
+			X_offset += w
+			boundlist.append(X_offset)
+		# Now time to build a histogram
+		rngy = h
+		rngx = X_offset
+		bins = [no_of_bins,int(no_of_bins*X_offset)]
+		H,ybins,xbins = N.histogram2d(all_Y,all_X,bins,range=([0,rngy],[0,rngx]), weights=all_E)
+		extent = [xbins[0],xbins[-1],ybins[0],ybins[-1]]
+		binarea = (float(h)/no_of_bins)*(float(X_offset)/int(no_of_bins*X_offset))
+		return H, boundlist, extent, binarea
+
+	def energies(self,absorb):
+		"""Returns the total number of hits on the receiver and the total energy absorbed"""
+		totalenergy = 0.0
+		totalhits = 0
+		for surface in self.plant.get_local_objects()[0].get_surfaces():
+			energy, pts = surface.get_optics_manager().get_all_hits()
+			totalenergy += sum(energy)
+			totalhits += sum(energy == absorb)
+		return totalenergy, totalhits
+
+		

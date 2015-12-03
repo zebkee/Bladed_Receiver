@@ -292,9 +292,7 @@ class TowerScene():
 	for face in self.objlist:
 		energy, pts = face.get_optics_manager().get_all_hits()
 		totalenergy += energy.sum()
-		print(len(energy))
-		print(len(list(energy)))
-		hits += len([i for i in list(energy) if i > 0.99*absorb])
+		hits += sum(energy == absorb)
 	return totalenergy, hits
 
     def z_histdata(self,no_of_bins=100):

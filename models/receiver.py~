@@ -52,9 +52,9 @@ def cavity_receiver(width, height, absorptivity=1.):
     right = Surface(RectPlateGM(width, height/2.0),opt.LambertianReceiver(absorptivity),location=r_[width/-2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/2))
     right.width = width
     right.height = height/2.
-    obj = AssembledObject(surfs=[front, left, right])
+    rec_obj = AssembledObject(surfs=[left, front, right])
     #obj.surfaces_for_next_iteration = types.MethodType(surfaces_for_next_iteration, obj, obj.__class__)
-    return [front, left, right], obj
+    return rec_obj,[left, front, right], [left, front, right]
 
 def thin_bladed_receiver(width, height, absorptivity, blades):
     """
@@ -64,18 +64,18 @@ def thin_bladed_receiver(width, height, absorptivity, blades):
     n = 0
     front.axis = [1,0,0]
     front.tilt = N.pi/2
-    reclist = []
-    reclist.append(front)
+    crit_ls = []
+    crit_ls.append(front)
     while n < blades:
 	blade = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[width/2-(n*width/(blades-1)),0.,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/-2))
 	blade.number = n+1
 	blade.axis = [0,1,0]
 	blade.tilt = N.pi/2
-	reclist.append(blade)
+	crit_ls.append(blade)
 	n += 1
-    obj = AssembledObject(surfs=reclist)
+    rec_obj = AssembledObject(surfs=crit_ls)
     #obj.surfaces_for_next_iteration = types.MethodType(surfaces_for_next_iteration, obj, obj.__class__)
-    return reclist, obj
+    return rec_obj, obj_ls, crit_ls
 
 def Lamby(a,x,y,z,rx,ry,rz,w,h):
 	"""
@@ -83,69 +83,6 @@ def Lamby(a,x,y,z,rx,ry,rz,w,h):
 	"""
 	surface = Surface(RectPlateGM(w,h),opt.LambertianReceiver(a),location=r_[x,y,z],rotation=z_rot(rx,ry,rz))
 	return surface
-
-def true_bladed_receiver(A,B,W1,W2,H,D,R):
-	"""
-	Constructs a thick bladed receiver with standardized orientation.
-	"""
-	#B is blades, W1 is X_width, W2 is Y_width, H is vertical height, D is depth of blades, R is thickness to sep. ratio
-	#A is absorptivity
-	S = W1/(B*(1.0+R)-1.0)
-	T = S*R
-	print(S)
-	print(T)
-	critlist = []
-	objlist = []
-	#start with leftmost
-	blade = Lamby(A,W1/2.,0,0,N.pi/-2,0,N.pi/-2,W2,H)
-	critlist.append(blade)
-	objlist.append(blade)
-	n = 1
-	while n < B:
-		bladeA = Lamby(A,W1/2.-(n-0.5)*T-(n-1)*S,W2/2.,0,N.pi/-2.,0,0,T,H)
-		critlist.append(bladeA)
-		objlist.append(bladeA)
-		bladeB = Lamby(A,W1/2.-n*T-(n-1)*S,W2/2.-D/2.,0,N.pi/-2.,0,N.pi/2.,D,H)
-		critlist.append(bladeB)
-		objlist.append(bladeB)
-		bladeC = Lamby(A,W1/2.-n*T-(n-0.5)*S,W2/2.-D,0,N.pi/-2.,0,0,S,H)
-		critlist.append(bladeC)
-		objlist.append(bladeC)
-		bladeD = Lamby(A,W1/2.-n*T-n*S,W2/2.-D/2.,0,N.pi/-2.,0,N.pi/-2.,D,H)
-		critlist.append(bladeD)
-		objlist.append(bladeD)
-		n += 1
-	#Now for the 2nd last critical blade
-	bladeA = Lamby(A,W1/2.-(n-0.5)*T-(n-1)*S,W2/2.,0,N.pi/-2.,0,0,T,H)
-	critlist.append(bladeA)
-	objlist.append(bladeA)
-	#And the last one
-	blade = Lamby(A,W1/-2.,0,0,N.pi/-2,0,N.pi/2,W2,H)
-	critlist.append(blade)
-	objlist.append(blade)
-	#Critlist is done!
-	#Backface
-	blade = Lamby(A,0,-W2/2,0,N.pi/-2,0,0,W1,H)
-	objlist.append(blade)
-	#Top and Bottom Extras
-	#For the blades
-	n = 1
-	while n <= B:
-		blade = Lamby(A,W1/2-(n-0.5)*T-(n-1)*S,0,H/2,0,0,0,T,W2)
-		objlist.append(blade)
-		blade = Lamby(A,W1/2-(n-0.5)*T-(n-1)*S,0,H/-2,0,0,0,T,W2)
-		objlist.append(blade)
-		n += 1
-	n = 1
-	while n < B:
-		blade = Lamby(A,W1/2-n*T-(n-0.5)*S,D/-2,H/2,0,0,0,S,W2-D)
-		objlist.append(blade)
-		blade = Lamby(A,W1/2-n*T-(n-0.5)*S,D/-2,H/-2,0,0,0,S,W2-D)
-		objlist.append(blade)
-		n += 1
-	#Assemble the object
-    	obj = AssembledObject(surfs=objlist)
-	return critlist, obj, objlist
 
 def test_receiver(width, height, absorptivity):
     """

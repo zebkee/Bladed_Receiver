@@ -40,8 +40,8 @@ def bladed_trace(index,A=0.9,B=4,W1=1,W2=1,H=1,D=0.9,R=1,tot_rays=1000000,ray_bu
 		H2 += H1
 	print("Processed "+str(n)+" rays.")
 	spill = 1.0*(n-subhitsT)/(n)
-	#effabs = energyT/(subhitsT)
-	effabs = energyT/((1-spill)*n)
+	effabs = energyT/(subhitsT)
+	#effabs = energyT/((1-spill)*n)
 	impratio = effabs/A
 	e_per_ray = 218.0/n #this is in kWatts
 	max_raw = N.amax(H2)
@@ -89,8 +89,8 @@ def bladed_traceMP(proc,index,A=0.9,B=4,W1=1,W2=1,H=1,D=0.9,R=1,tot_rays=1000000
 		scene = None
 	print("Processed "+str(n)+" rays.")
 	spill = 1.0*(n-subhitsT)/(n)
-	#effabs = energyT/(subhitsT)
-	effabs = energyT/((1-spill)*n)
+	effabs = energyT/(subhitsT)
+	#effabs = energyT/((1-spill)*n)
 	impratio = effabs/A
 	e_per_ray = 218.0/n #this is in kWatts
 	max_raw = N.amax(H2)
