@@ -91,4 +91,4 @@ def test_receiver(width, height, absorptivity):
     front = Lamby(absorptivity,0,0,0,N.pi/-2,0,N.pi/-2,width,height)
     #front = Surface(RectPlateGM(width,height),opt.LambertianReceiver(absorptivity),location=r_[0.,1,0.],rotation=z_rot(N.pi/2,N.pi/2,N.pi/2))
     obj = AssembledObject(surfs=[front])
-    return [front], obj
+    return obj, [front], [front]

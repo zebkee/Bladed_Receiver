@@ -46,10 +46,10 @@ def cavity_receiver(width, height, absorptivity=1.):
     Constructs a lambertian receiver consisting of three faces. Returns a list of receiving faces, the assembled object
     """
     front = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[0.,0.,0.],rotation=general_axis_rotation(r_[1,0,0],N.pi/2))
-    left = Surface(RectPlateGM(width, height/2.0),opt.LambertianReceiver(absorptivity),location=r_[width/2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/-2))
+    left = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[width/2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/-2))
     left.width = width
     left.height = height/2.
-    right = Surface(RectPlateGM(width, height/2.0),opt.LambertianReceiver(absorptivity),location=r_[width/-2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/2))
+    right = Surface(RectPlateGM(width, height),opt.LambertianReceiver(absorptivity),location=r_[width/-2,width/2,0.],rotation=general_axis_rotation(r_[0,1,0],N.pi/2))
     right.width = width
     right.height = height/2.
     rec_obj = AssembledObject(surfs=[left, front, right])
@@ -92,3 +92,14 @@ def test_receiver(width, height, absorptivity):
     #front = Surface(RectPlateGM(width,height),opt.LambertianReceiver(absorptivity),location=r_[0.,1,0.],rotation=z_rot(N.pi/2,N.pi/2,N.pi/2))
     obj = AssembledObject(surfs=[front])
     return obj, [front], [front]
+
+def cavity_aligned(width,height,absorptivity):
+	"""Constructs a lambertian cavity receiver with aligned surfaces"""
+	a = absorptivity
+	left = Lamby(a,width/2.,0,0,N.pi/-2.,0,N.pi/2.,width,height)
+	centre = Lamby(a,0,width/-2.,0,N.pi/-2,0,0,width,height)
+	right = Lamby(a,width/-2.,0,0,N.pi/-2.,0,N.pi/-2.,width,height)
+	rec_obj = AssembledObject(surfs=[left,centre,right])
+	surf_ls = [left,centre,right]
+	crit_ls = [left,centre,right]
+	return rec_obj, surf_ls, crit_ls

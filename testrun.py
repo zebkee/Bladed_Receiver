@@ -29,5 +29,5 @@ def test_generic(rec_obj,surf_ls,crit_ls,absorp):
 
 width = 1
 height = 1
-rec_obj, surf_ls, crit_ls = cavity_receiver(width, height, absorptivity=0.8)
+rec_obj, surf_ls, crit_ls = cavity_aligned(width, height, absorptivity=0.8)
 test_generic(rec_obj, surf_ls, crit_ls,0.8)

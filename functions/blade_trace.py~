@@ -3,7 +3,7 @@ from models.receiver import *
 import matplotlib.pyplot as plt
 import timeit
 
-def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=100000,bins=50,render_bool=False):
+def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=100000,bins=50,render_bool=True):
 	"""Raytraces a generic receiver, where rec_obj is an assembled object, surf_ls is a list of all surfaces and
 	   crit_ls is a list of all surfaces that are to be plotted in the histogram"""
 	heliocsv = "/home/zebedee/Tracer/Tracer/examples/sandia_hstat_coordinates.csv"

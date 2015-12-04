@@ -14,8 +14,8 @@ def test_receiver(rays=2180,bins=50):
 def test_generic(rec_obj,surf_ls,crit_ls,absorp):
 	""" Just test a generic receiver"""
 
-
 	result_ls = generic_trace(1,rec_obj,surf_ls,crit_ls,absorp)
+	n = 0
 	while n < 6:
 		print(result_ls[n])
 		n += 1
@@ -29,5 +29,5 @@ def test_generic(rec_obj,surf_ls,crit_ls,absorp):
 
 width = 1
 height = 1
-rec_obj, surf_ls, crit_ls = cavity_receiver(width, height, absorptivity=0.8)
+rec_obj, surf_ls, crit_ls = cavity_aligned(width, height, absorptivity=0.8)
 test_generic(rec_obj, surf_ls, crit_ls,0.8)
