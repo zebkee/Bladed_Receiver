@@ -24,10 +24,10 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 	scene.trace(rph=rph,render = render_bool)
 	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
 	energy,hits = scene.energies(A)
-	energyT += energy
-	hitsT += hits
+	energyT = energy
+	hitsT = hits
 	binarea = area #The first assignment is enough
-	H2 = H1 #The first assignment is enough
+	#H2 = H1 #The first assignment is enough
 	extent1 = extent
 	boundlist1 = boundlist # First assignment is enough
 	rays_used += rph*218
@@ -38,13 +38,13 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 		scene.gen_plant()
 		scene.aim_field()
 		scene.trace(rph=rph,render=False)
-		H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
-		energy, hits = scene.energies(A)
-		energyT += energy
-		hitsT += hits
-		H2 += H1
-		del scene #Try to free up memory
 		rays_used += rph*218
+	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+	energy, hits = scene.energies(A)
+	energyT = energy
+	hitsT = hits
+	H2 = H1
+	del scene #Try to free up memory
 	#Calculate the final results
 	spill = 1.0*(rays_used-hitsT)/rays_used
 	effabs = energyT/hitsT
