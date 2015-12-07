@@ -163,10 +163,14 @@ class TowerScene():
 
 		#print("length here"+str(len((self.plant.get_local_objects()[0]).get_surfaces())))
 
-		for plate in self.crit_ls:	#For each surface within the list of critical surfs
+		#for plate in self.crit_ls:	#For each surface within the list of critical surfs
+		crit_length = len(self.crit_ls)
+		count = 0
+		while count < crit_length: # count is one less than crit_length for indexing convention
+			surface = (self.plant.get_local_objects()[0]).get_surfaces()[count]
 			# returns all coordinates where a hit occured and its energy absorbed
-			energy, pts = plate.get_optics_manager().get_all_hits()
-			corners = plate.mesh(1) #corners is an array of all corners of the plate
+			energy, pts = surface.get_optics_manager().get_all_hits()
+			corners = surface.mesh(1) #corners is an array of all corners of the plate
 			# BLC is bottom left corner "origin" of the histogram plot
 			# BRC is the bottom right corner "x-axis" used for vector u
 			# TLC is the top right corner "y-axis" used for vector v
@@ -194,6 +198,7 @@ class TowerScene():
 			all_E += list(energy)
 			X_offset += w
 			boundlist.append(X_offset)
+			count += 1
 		# Now time to build a histogram
 		rngy = h
 		rngx = X_offset

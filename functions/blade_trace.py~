@@ -3,6 +3,8 @@ from models.receiver import *
 import matplotlib.pyplot as plt
 import timeit
 
+import copy
+
 def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=100000,bins=50,render_bool=True):
 	"""Raytraces a generic receiver, where rec_obj is an assembled object, surf_ls is a list of all surfaces and
 	   crit_ls is a list of all surfaces that are to be plotted in the histogram"""
@@ -11,17 +13,23 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 	
 	A = absorp
 
+	#Creates copies of these so a to not affect the original setup
+	rec_obj_copy = copy.deepcopy(rec_obj)
+        surf_ls_copy = copy.deepcopy(surf_ls)
+        crit_ls_copy = copy.deepcopy(crit_ls)
+
 	rays_used = 0
 	hitsT = 0
 	energyT = 0
 
 	rph = int(rays_per_bund/218)
 
-	scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
+	scene = TowerScene(rec_obj=rec_obj_copy,surf_ls = surf_ls_copy, crit_ls = crit_ls_copy, heliostat = heliocsv)
 	scene.aim_field()
 	
 	scene.trace(rph=rph,render = render_bool)
 	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+	print(N.sum(H1))
 	energy,hits = scene.energies(A)
 	energyT = energy
 	hitsT = hits
@@ -33,11 +41,12 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 	del scene #Try to free up memory
 
 	while rays_used < tot_rays:
-		scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
+		scene = TowerScene(rec_obj=rec_obj_copy,surf_ls = surf_ls_copy, crit_ls = crit_ls_copy, heliostat = heliocsv)
 		scene.aim_field()
 		scene.trace(rph=rph,render=False)
 		rays_used += rph*218
 	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+	print(N.sum(H1))
 	energy, hits = scene.energies(A)
 	energyT = energy
 	hitsT = hits
@@ -271,7 +280,7 @@ def write_data(filename,lsofls):
 	   should be left out"""
 	f = open(filename,'w')
 	f.write("Index "+"Spill "+"EffAbs "+"MaxConc "+"TotRays "+"TotTime "+"\n")
-	for line in result:	#take the first 6 values only
+	for line in lsofls:	#take the first 6 values only
 		f.write(str(line[0])+" "+str(line[1])+" "+str(line[2])+" "+str(line[3])+\
 		" "+str(line[4])+" "+str(line[5])+"\n")
 	f.close
