@@ -2,6 +2,7 @@
 import numpy as N
 from numpy import r_
 from scipy.constants import degree
+import matplotlib.pyplot as plt
 #Tracer Packages
 from tracer.ray_bundle import RayBundle
 from tracer.sources import pillbox_sunshape_directions
@@ -66,12 +67,13 @@ class TowerScene():
 		rec_trans = N.array((rx_M)*(ry_M)*(rz_M))
 		# applies translations to the rotation matrix to get the final transformation
 		rec_trans[0,3] = self.dx
-		rec_trans[0,2] = self.dy
+		rec_trans[1,3] = self.dy
 		rec_trans[2,3] = self.dz
 		# applies the transformation to the receiver object
 		self.rec_obj.set_transform(rec_trans)
 		# combines all objects into a single plant
 		self.plant = Assembly(objects = [self.rec_obj], subassemblies=[self.field])
+
 
 	def aim_field(self):
 		"""Aims the field to the sun?"""
@@ -130,12 +132,15 @@ class TowerScene():
 			ray_sources.append(rays)
 			n += 1
 		# Perform the trace
-		e = TracerEngineMP(self.plant)
-		e.minener = minE
-		e.itmax = iters
-		e.multi_ray_sim(raysources, procs)
+		tracerinstance = TracerEngineMP(self.plant)
+		#p.minener = minE
+		#p.itmax = iters
+		tracerinstance.multi_ray_sim(ray_sources, procs)
 		# Reassign the assembly
-		self.plant = e._asm
+		print("self.plant")
+		print(self.plant)
+		self.plant = tracerinstance._asm
+		#print(self.plant)
 
 		# Rendering if the option is True. Note: still has problems
 		if render == True:
@@ -155,6 +160,8 @@ class TowerScene():
 		all_Y = []	# List of all y-coordinates
 		all_E = []	# List of all energy values
 		boundlist = [0]	# List of plate boundaries, starts with x=0
+
+		#print("length here"+str(len((self.plant.get_local_objects()[0]).get_surfaces())))
 
 		for plate in self.crit_ls:	#For each surface within the list of critical surfs
 			# returns all coordinates where a hit occured and its energy absorbed
@@ -200,10 +207,16 @@ class TowerScene():
 		"""Returns the total number of hits on the receiver and the total energy absorbed"""
 		totalenergy = 0.0
 		totalhits = 0
-		for surface in self.plant.get_local_objects()[0].get_surfaces():
+		#length = 0
+		#for surface in self.plant.get_local_objects()[0].get_surfaces():
+		for surface in (self.plant.get_local_objects()[0]).get_surfaces():
 			energy, pts = surface.get_optics_manager().get_all_hits()
+			#length += len(energy)
+			#plt.plot(range(0,len(energy)),energy,'ro')
+			#plt.show()
 			totalenergy += sum(energy)
 			totalhits += sum(energy == absorb)
+		#print("Length is"+str(length))
 		return totalenergy, totalhits
 
 		

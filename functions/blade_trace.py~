@@ -3,7 +3,7 @@ from models.receiver import *
 import matplotlib.pyplot as plt
 import timeit
 
-def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=1000000,bins=50,render_bool=True):
+def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=100000,bins=50,render_bool=True):
 	"""Raytraces a generic receiver, where rec_obj is an assembled object, surf_ls is a list of all surfaces and
 	   crit_ls is a list of all surfaces that are to be plotted in the histogram"""
 	heliocsv = "/home/zebedee/Tracer/Tracer/examples/sandia_hstat_coordinates.csv"
@@ -18,7 +18,6 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 	rph = int(rays_per_bund/218)
 
 	scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
-	scene.gen_plant()
 	scene.aim_field()
 	
 	scene.trace(rph=rph,render = render_bool)
@@ -35,7 +34,6 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 
 	while rays_used < tot_rays:
 		scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
-		scene.gen_plant()
 		scene.aim_field()
 		scene.trace(rph=rph,render=False)
 		rays_used += rph*218
@@ -57,7 +55,107 @@ def generic_trace(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_r
 
 	return [index,spill,effabs,max_conc,rays_used,time_used,H_norm,boundlist1,extent1]
 	
+def generic_traceMP(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=10000,tot_rays=100000,bins=50,render_bool=True,procs=1):
+	"""Raytraces a generic receiver, where rec_obj is an assembled object, surf_ls is a list of all surfaces and
+	   crit_ls is a list of all surfaces that are to be plotted in the histogram"""
+	heliocsv = "/home/zebedee/Tracer/Tracer/examples/sandia_hstat_coordinates.csv"
+	start = timeit.default_timer()
 	
+	A = absorp
+
+	rays_used = 0
+	hitsT = 0
+	energyT = 0
+
+	rph = int(rays_per_bund/218)
+
+	scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
+	scene.gen_plant()
+	scene.aim_field()
+	
+	scene.traceMP(procs,rph=rph,render = render_bool)
+	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+	energy,hits = scene.energies(A)
+	print(energy)
+	print(hits)
+	energyT = energy
+	hitsT = hits
+	binarea = area #The first assignment is enough
+	#H2 = H1 #The first assignment is enough
+	extent1 = extent
+	boundlist1 = boundlist # First assignment is enough
+	rays_used += rph*218*procs #multiply by number of processors
+	del scene #Try to free up memory
+
+	while rays_used < tot_rays:
+		scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
+		scene.gen_plant()
+		scene.aim_field()
+		scene.traceMP(procs,rph=rph,render=False)
+		rays_used += rph*218*procs #ditto
+		H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+		energy, hits = scene.energies(A)
+		print(energy)
+		print(hits)
+		energyT = energy
+		hitsT = hits
+		H2 = H1
+	del scene #Try to free up memory
+	#Calculate the final results
+	spill = 1.0*(rays_used-hitsT)/rays_used
+	effabs = energyT/hitsT
+	e_per_ray = 218.0/rays_used
+	H_norm = H2*(e_per_ray/binarea)
+	#print(H_norm)
+	max_conc = N.amax(H_norm)
+	stop = timeit.default_timer()
+	time_used = stop-start
+
+	return [index,spill,effabs,max_conc,rays_used,time_used,H_norm,boundlist1,extent1]	
+
+def single_traceMP(index,rec_obj,surf_ls,crit_ls,absorp,rays_per_bund=20000,bins=50,render_bool=False,procs=1):
+	"Does a single trace using multiple processsors to test validity of results"""
+	heliocsv = "/home/zebedee/Tracer/Tracer/examples/sandia_hstat_coordinates.csv"
+	start = timeit.default_timer()
+	
+	A = absorp
+
+	rays_used = 0
+	hitsT = 0
+	energyT = 0
+
+	rph = int(rays_per_bund/218)
+
+	scene = TowerScene(rec_obj=rec_obj,surf_ls = surf_ls, crit_ls = crit_ls, heliostat = heliocsv)
+	scene.gen_plant()
+	scene.aim_field()
+	
+	
+	scene.traceMP(procs,rph=rph,render = render_bool)
+	H1, boundlist, extent, area = scene.hist_comb(no_of_bins=bins)
+	energy,hits = scene.energies(A)
+	print(energy)
+	print(hits)
+	energyT = energy
+	hitsT = hits
+	binarea = area #The first assignment is enough
+	#H2 = H1 #The first assignment is enough
+	extent1 = extent
+	boundlist1 = boundlist # First assignment is enough
+	rays_used += rph*218*procs #multiply by number of processors
+	#del scene #Try to free up memory
+
+	#Calculate the final results
+	spill = 1.0*(rays_used-hitsT)/rays_used
+	effabs = energyT/hitsT
+	e_per_ray = 218.0/rays_used
+	H_norm = H1*(e_per_ray/binarea)
+	#print(H_norm)
+	max_conc = N.amax(H_norm)
+	stop = timeit.default_timer()
+	time_used = stop-start
+
+	return [index,spill,effabs,max_conc,rays_used,time_used,H_norm,boundlist1,extent1]	
 
 def bladed(absorp,no_of_blades,width_x,width_y,height,depth,ratio):
 	"""Generates a scene using a bladed receiver and Sandia's heliostat"""
