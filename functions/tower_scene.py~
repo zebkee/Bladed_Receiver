@@ -16,6 +16,8 @@ from tracer.models.heliostat_field import HeliostatField, radial_stagger, solar_
 #Coin3D renderer
 from tracer.CoIn_rendering.rendering import *
 
+import copy
+
 
 class TowerScene():
 	""" Creates a scene of the heliostats, tower and receiver """
@@ -25,7 +27,8 @@ class TowerScene():
 	# heliostat is a csv file of coordinates (Example: sandia_hstat_coordinates.csv)
 	# dx,dy,dz are x,y,z offsets from the origin (default dz is 6.1 metres)
 	# rx,ry,rz are rotations about the x,y,z axes in radians (default 0)
-	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 80.,sun_elev = 45.,\
+	# currently set to spring/autumn equinox at solar noon in Sandia
+	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 90.,sun_elev = 55.1,\
 	dx = 0., dy = 0., dz = 6.1, rx = 0, ry = 0, rz = 0):
 		self.sun_az = sun_az
 		self.sun_elev = sun_elev
@@ -108,47 +111,9 @@ class TowerScene():
 		if render == True:
 			trace_scene = Renderer(e)
 			trace_scene.show_rays()
-			
-	def traceMP(self, procs , rph, iters = 10000, minE = 1e-9, render = False):
-		"""The multiprocessing version of trace."""
-		# Number of rays per processor
-		num_rays = rph*len(self.field.get_heliostats())
-		# Number of rays per traceMP called
-		self.no_of_rays += num_rays*procs
-		# Get the solar vector
-        	sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
-        	rot_sun = rotation_to_z(-sun_vec)
-        	direct = N.dot(rot_sun, pillbox_sunshape_directions(num_rays, 0.00465))
-		# Generate a list of ray bundles using a random generator
-		n = 1
-		ray_sources = []
-		while n <= procs:
-	        	xy = N.random.uniform(low=-0.25, high=0.25, size=(2, num_rays))
-        		base_pos = N.tile(self.pos, (rph, 1)).T
-        		base_pos += N.dot(rot_sun[:,:2], xy)
-        
-        		base_pos -= direct
-        		rays = RayBundle(base_pos, direct, energy=N.ones(num_rays))
-			ray_sources.append(rays)
-			n += 1
-		# Perform the trace
-		tracerinstance = TracerEngineMP(self.plant)
-		#p.minener = minE
-		#p.itmax = iters
-		tracerinstance.multi_ray_sim(ray_sources, procs)
-		# Reassign the assembly
-		print("self.plant")
-		print(self.plant)
-		self.plant = tracerinstance._asm
-		#print(self.plant)
-
-		# Rendering if the option is True. Note: still has problems
-		if render == True:
-			trace_scene = Renderer(e)
-			trace_scene.show_rays()
 
 	def hist_comb(self, no_of_bins=100):
-		"""Returns a combined histogram of all critical surfaces and relevant data"""
+		"""Returns a combined histogram of all critical surfaces and relevant data. Note that this may become cluttered"""
 		# H is the histogram array
 		# boundlist is a list of plate boundaries given in x coordinates
 		# extent is a list of [xmin,xmax,ymin,ymax] values
@@ -163,7 +128,7 @@ class TowerScene():
 
 		#print("length here"+str(len((self.plant.get_local_objects()[0]).get_surfaces())))
 
-		for plate in self.crit_ls:	#For each surface within the list of critical surfs
+		#for plate in self.crit_ls:	#For each surface within the list of critical surfs
 		crit_length = len(self.crit_ls)
 		count = 0
 		while count < crit_length: # count is one less than crit_length for indexing convention
