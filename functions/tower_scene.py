@@ -28,7 +28,12 @@ class TowerScene():
 	# dx,dy,dz are x,y,z offsets from the origin (default dz is 6.1 metres)
 	# rx,ry,rz are rotations about the x,y,z axes in radians (default 0)
 	# currently set to spring/autumn equinox at solar noon in Sandia
-	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 90.,sun_elev = 55.1,\
+	# Sun_elev is actually the zenith angle! 90 degrees actually gives a sun at the horizontal
+	# sun_elev should be 34.9 for spring/autumn equinox
+	# For the Azi angle it seems to be measured clockwise from the south, assuming the heliostats are facing southward.
+	# At solar noon sun_az should be = 0
+
+	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 0.,sun_elev = 34.9,\
 	dx = 0., dy = 0., dz = 6.1, rx = 0, ry = 0, rz = 0):
 		self.sun_az = sun_az
 		self.sun_elev = sun_elev
