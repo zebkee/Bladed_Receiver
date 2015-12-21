@@ -2,6 +2,7 @@
 import numpy as N
 from numpy import r_
 from scipy.constants import degree
+import math
 import matplotlib.pyplot as plt
 #Tracer Packages
 from tracer.ray_bundle import RayBundle
@@ -12,14 +13,15 @@ from tracer.tracer_engine import TracerEngine
 from tracer.tracer_engine_mp import TracerEngineMP
 from tracer.optics_callables import *
 #Tracer Models
+from tracer.models.one_sided_mirror import one_sided_receiver
 from tracer.models.heliostat_field import HeliostatField, radial_stagger, solar_vector
 #Coin3D renderer
 from tracer.CoIn_rendering.rendering import *
 
 import copy
+import timeit
 
-
-class TowerScene():
+class TowerSceneMP():
 	""" Creates a scene of the heliostats, tower and receiver """
 	# recobj is an assembled receiver object
 	# surf_ls is a list of all surfaces used in the receiver
@@ -82,39 +84,43 @@ class TowerScene():
 		"""Aims the field to the sun?"""
 		self.field.aim_to_sun(self.sun_az*degree, self.sun_elev*degree)
 
-	def trace(self, rph, iters = 10000, minE = 1e-9, render = False):
+	def traceMP(self, rays_per_run, iters = 10000, minE = 1e-9, render = False,procs = 1):
 		"""Commences raytracing using (rph) number of rays per heliostat, for a maximum of 
 		   (iters) iterations, discarding rays with energy less than (minE). If render is
 		   True, a 3D scene will be displayed which would need to be closed to proceed."""
 		# Get the solar vector using azimuth and elevation
 		sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
+		rot_sun = rotation_to_z(-sun_vec)
         	# Calculate number of rays used. Rays per heliostat * number of heliostats.
-        	num_rays = rph*len(self.field.get_heliostats())
-		self.no_of_rays += num_rays
-		# Generates the ray bundle
-        	rot_sun = rotation_to_z(-sun_vec)
-        	direct = N.dot(rot_sun, pillbox_sunshape_directions(num_rays, 0.00465))
-        
-        	xy = N.random.uniform(low=-0.25, high=0.25, size=(2, num_rays))
-        	base_pos = N.tile(self.pos, (rph, 1)).T #Check if its is rph or num_rays
-       		base_pos += N.dot(rot_sun[:,:2], xy)
-        	
-        	base_pos -= direct
-        	rays = RayBundle(base_pos, direct, energy=N.ones(num_rays))
+		rppph = int(rays_per_run/(procs*len(self.field.get_heliostats())))
+		rpp = rppph*len(self.field.get_heliostats())
+		rpr = rpp*procs					#actual rays per run used
 
-		# Perform the raytracing
-		e = TracerEngine(self.plant)
-		e.ray_tracer(rays, iters, minE, tree=True)
-		e.minener = minE
-		rays_in = sum(e.tree._bunds[0].get_energy())
+		ray_sources = []
+		n = 1
+		while n <= procs:
+			direct = N.dot(rot_sun, pillbox_sunshape_directions(rpp, 0.00465))
+			xy = N.random.uniform(low=-0.25, high=0.25, size=(2, rpp))
+        		base_pos = N.tile(self.pos, (rppph, 1)).T
+        		base_pos += N.dot(rot_sun[:,:2], xy)
+
+        		base_pos -= direct
+        		rays = RayBundle(base_pos, direct, energy=N.ones(rpp))
+			ray_sources.append(rays)
+			n += 1
+
+		e = TracerEngineMP(self.plant)
+		e.multi_ray_sim(ray_sources,procs)
+		self.plant = e._asm
 		self.helio_hits = sum(e.tree._bunds[1].get_energy())
-
-
-		# Optional rendering
+			# Note that you may need some stuff in here
 		if render == True:
 			trace_scene = Renderer(e)
-			trace_scene.show_rays()
-			
+			trace_scene.show_rays(resolution=10)
+			render = False
+
+		return rpr #this is special
+
 	def hist_comb(self, no_of_bins=100):
 		"""Returns a combined histogram of all critical surfaces and relevant data"""
 		# H is the histogram array
@@ -177,8 +183,7 @@ class TowerScene():
 		return H, boundlist, extent, binarea
 
 	def energies(self):
-		"""Returns the total number of hits on the heliostats, receiver and the total energy absorbed"""
-		
+		"""Returns the total number of hits on the receiver and the total energy absorbed"""
 		totalenergy = 0.0
 		totalhits = 0
 		heliohits = self.helio_hits
@@ -195,4 +200,4 @@ class TowerScene():
 		#print("Length is"+str(length))
 		return totalenergy, totalhits, heliohits
 
-		
+

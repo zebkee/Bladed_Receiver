@@ -27,12 +27,6 @@ class TowerScene():
 	# heliostat is a csv file of coordinates (Example: sandia_hstat_coordinates.csv)
 	# dx,dy,dz are x,y,z offsets from the origin (default dz is 6.1 metres)
 	# rx,ry,rz are rotations about the x,y,z axes in radians (default 0)
-	# currently set to spring/autumn equinox at solar noon in Sandia
-	# Sun_elev is actually the zenith angle! 90 degrees actually gives a sun at the horizontal
-	# sun_elev should be 34.9 for spring/autumn equinox
-	# For the Azi angle it seems to be measured clockwise from the south, assuming the heliostats are facing southward.
-	# At solar noon sun_az should be = 0
-
 	def __init__(self,rec_obj,surf_ls,crit_ls,heliostat,sun_az = 0.,sun_elev = 34.9,\
 	dx = 0., dy = 0., dz = 6.1, rx = 0, ry = 0, rz = 0):
 		self.sun_az = sun_az
@@ -54,7 +48,7 @@ class TowerScene():
 		# generate the entire plant now
 		self.gen_plant()
 		# creates an attribute which shows number of rays used, start at zero
-		self.no_of_rays = 0
+		self.helio_hits = 0
 
 	def gen_rays(self):
 		sun_vec = solar_vector(self.sun_az*degree, self.sun_elev*degree)
@@ -67,7 +61,7 @@ class TowerScene():
 	def gen_plant(self):
 		"""Generates the entire plant"""
 		# set heliostat field characteristics: 0.52m*0.52m, abs = 0, aim_h =61
-		self.field = HeliostatField(self.pos, 6.09e-1, 6.01e-1, 0, 6.1, 1e-3)
+		self.field = HeliostatField(self.pos, 6.09e-1, 6.09e-1, 0, 6.1, 1e-3)
 		# generates a transformation matrix of the receiver rec_trans for rotations
 		rx_M = N.matrix(rotx(self.rx))
 		ry_M = N.matrix(rotx(self.ry))
@@ -111,14 +105,17 @@ class TowerScene():
 		e = TracerEngine(self.plant)
 		e.ray_tracer(rays, iters, minE, tree=True)
 		e.minener = minE
+		rays_in = sum(e.tree._bunds[0].get_energy())
+		self.helio_hits = sum(e.tree._bunds[1].get_energy())
+
 
 		# Optional rendering
 		if render == True:
 			trace_scene = Renderer(e)
 			trace_scene.show_rays()
-
+			
 	def hist_comb(self, no_of_bins=100):
-		"""Returns a combined histogram of all critical surfaces and relevant data. Note that this may become cluttered"""
+		"""Returns a combined histogram of all critical surfaces and relevant data"""
 		# H is the histogram array
 		# boundlist is a list of plate boundaries given in x coordinates
 		# extent is a list of [xmin,xmax,ymin,ymax] values
@@ -178,20 +175,23 @@ class TowerScene():
 		binarea = (float(h)/no_of_bins)*(float(X_offset)/int(no_of_bins*X_offset))
 		return H, boundlist, extent, binarea
 
-	def energies(self,absorb):
-		"""Returns the total number of hits on the receiver and the total energy absorbed"""
+	def energies(self):
+		"""Returns the total number of hits on the heliostats, receiver and the total energy absorbed"""
+		
 		totalenergy = 0.0
 		totalhits = 0
+		heliohits = self.helio_hits
 		#length = 0
 		#for surface in self.plant.get_local_objects()[0].get_surfaces():
 		for surface in (self.plant.get_local_objects()[0]).get_surfaces():
 			energy, pts = surface.get_optics_manager().get_all_hits()
+			absorp = surface._opt._opt._abs
 			#length += len(energy)
 			#plt.plot(range(0,len(energy)),energy,'ro')
 			#plt.show()
 			totalenergy += sum(energy)
-			totalhits += sum(energy == absorb)
+			totalhits += sum(energy == absorp)
 		#print("Length is"+str(length))
-		return totalenergy, totalhits
+		return totalenergy, totalhits, heliohits
 
 		
